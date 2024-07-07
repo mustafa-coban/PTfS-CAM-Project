@@ -241,28 +241,30 @@ Grid::~Grid()
     arrayPtr = NULL;
 }
 
-//Calculates lhs[:] = a*x[:] + b*y[:]
+// Calculates lhs[:] = a*x[:] + b*y[:]
 void axpby(Grid *lhs, double a, Grid *x, double b, Grid *y, bool halo)
 {
     START_TIMER(AXPBY);
 #ifdef DEBUG
-    assert((lhs->numGrids_y(true)==x->numGrids_y(true)) && (lhs->numGrids_x(true)==x->numGrids_x(true)));
-    assert((y->numGrids_y(true)==x->numGrids_y(true)) && (y->numGrids_x(true)==x->numGrids_x(true)));
+    assert((lhs->numGrids_y(true) == x->numGrids_y(true)) && (lhs->numGrids_x(true) == x->numGrids_x(true)));
+    assert((y->numGrids_y(true) == x->numGrids_y(true)) && (y->numGrids_x(true) == x->numGrids_x(true)));
 #endif
 
-    int shift = halo?0:HALO;
+    int shift = halo ? 0 : HALO;
 
 #ifdef LIKWID_PERFMON
     LIKWID_MARKER_START("AXPBY");
 #endif
 
-    for(int yIndex=shift; yIndex<lhs->numGrids_y(true)-shift; ++yIndex)
+    #pragma omp parallel for simd collapse(2) simdlen(8)
+    for (int yIndex = shift; yIndex < lhs->numGrids_y(true) - shift; ++yIndex)
     {
-        for(int xIndex=shift; xIndex<lhs->numGrids_x(true)-shift; ++xIndex)
+        for (int xIndex = shift; xIndex < lhs->numGrids_x(true) - shift; ++xIndex)
         {
-            (*lhs)(yIndex,xIndex) = (a*(*x)(yIndex,xIndex)) + (b*(*y)(yIndex,xIndex));
+            (*lhs)(yIndex, xIndex) = (a * (*x)(yIndex, xIndex)) + (b * (*y)(yIndex, xIndex));
         }
     }
+
 #ifdef LIKWID_PERFMON
     LIKWID_MARKER_STOP("AXPBY");
 #endif
@@ -271,25 +273,26 @@ void axpby(Grid *lhs, double a, Grid *x, double b, Grid *y, bool halo)
 }
 
 
-//Calculates lhs[:] = a*rhs[:]
+// Calculates lhs[:] = a * rhs[:]
 void copy(Grid *lhs, double a, Grid *rhs, bool halo)
 {
     START_TIMER(COPY);
 #ifdef DEBUG
-    assert((lhs->numGrids_y(true)==rhs->numGrids_y(true)) && (lhs->numGrids_x(true)==rhs->numGrids_x(true)));
+    assert((lhs->numGrids_y(true) == rhs->numGrids_y(true)) && (lhs->numGrids_x(true) == rhs->numGrids_x(true)));
 #endif
 
-    int shift = halo?0:HALO;
+    int shift = halo ? 0 : HALO;
 
 #ifdef LIKWID_PERFMON
     LIKWID_MARKER_START("COPY");
 #endif
 
-    for(int yIndex=shift; yIndex<lhs->numGrids_y(true)-shift; ++yIndex)
+    #pragma omp parallel for simd collapse(2) simdlen(8)
+    for (int yIndex = shift; yIndex < lhs->numGrids_y(true) - shift; ++yIndex)
     {
-        for(int xIndex=shift; xIndex<lhs->numGrids_x(true)-shift; ++xIndex)
+        for (int xIndex = shift; xIndex < lhs->numGrids_x(true) - shift; ++xIndex)
         {
-            (*lhs)(yIndex,xIndex) = a*(*rhs)(yIndex,xIndex);
+            (*lhs)(yIndex, xIndex) = a * (*rhs)(yIndex, xIndex);
         }
     }
 
@@ -297,13 +300,11 @@ void copy(Grid *lhs, double a, Grid *rhs, bool halo)
     LIKWID_MARKER_STOP("COPY");
 #endif
 
-
     STOP_TIMER(COPY);
 }
 
-
-//Calculate dot product of x and y
-//i.e. ; res = x'*y
+// Calculate dot product of x and y
+// i.e.; res = x'*y
 double dotProduct(Grid *x, Grid *y, bool halo)
 {
     START_TIMER(DOT_PRODUCT);
@@ -311,18 +312,21 @@ double dotProduct(Grid *x, Grid *y, bool halo)
     assert((y->numGrids_y(true)==x->numGrids_y(true)) && (y->numGrids_x(true)==x->numGrids_x(true)));
 #endif
 
-    int shift = halo?0:HALO;
+    int shift = halo ? 0 : HALO;
 
 #ifdef LIKWID_PERFMON
     LIKWID_MARKER_START("DOT_PRODUCT");
 #endif
 
-    double dot_res = 0;
-    for(int yIndex=shift; yIndex<x->numGrids_y(true)-shift; ++yIndex)
+    double dot_res = 0.0;
+
+    #pragma omp parallel for simd reduction(+:dot_res) collapse(2) simdlen(8)
+    for(int yIndex = shift; yIndex < x->numGrids_y(true) - shift; ++yIndex)
     {
-        for(int xIndex=shift; xIndex<x->numGrids_x(true)-shift; ++xIndex)
+        for(int xIndex = shift; xIndex < x->numGrids_x(true) - shift; ++xIndex)
         {
-            dot_res += (*x)(yIndex,xIndex)*(*y)(yIndex,xIndex);
+            
+            dot_res += (*x)(yIndex, xIndex) * (*y)(yIndex, xIndex);
         }
     }
 
@@ -330,11 +334,9 @@ double dotProduct(Grid *x, Grid *y, bool halo)
     LIKWID_MARKER_STOP("DOT_PRODUCT");
 #endif
 
-
     STOP_TIMER(DOT_PRODUCT);
     return dot_res;
 }
-
 
 bool isSymmetric(Grid *u, double tol, bool halo)
 {
@@ -342,20 +344,21 @@ bool isSymmetric(Grid *u, double tol, bool halo)
     const int xSize = u->numGrids_x(true);
     const int ySize = u->numGrids_y(true);
 
-    int shift = halo?0:HALO;
+    int shift = halo ? 0 : HALO;
 
-    for ( int j=shift; j!=ySize-shift; j+=1)
+    #pragma omp parallel for simd collapse(2) reduction(&&:flag) simdlen(8)
+    for (int j = shift; j < ySize - shift; ++j)
     {
-        for ( int i=shift; i!=xSize-shift; i+=1)
+        for (int i = shift; i < xSize - shift; ++i)
         {
-            if( ((*u)(i,j) - (*u)(j,i)) > tol )
+            if (std::abs((*u)(i, j) - (*u)(j, i)) > tol)
             {
                 flag = false;
-                break;
+                // No break needed here since the reduction clause will handle flag
             }
-
         }
     }
+
     return flag;
 }
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

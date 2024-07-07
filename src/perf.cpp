@@ -18,6 +18,16 @@ double rhsSineFunc(int i, int j, double h_x, double h_y)
     return 2*M_PI*M_PI*sin(M_PI*i*h_x)*sin(M_PI*j*h_y);
 }
 
+void pin_threads() {
+    #pragma omp parallel
+    {
+        // Pin each thread to a specific core
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET(omp_get_thread_num(), &cpuset);
+        sched_setaffinity(0, sizeof(cpuset), &cpuset);
+    }
+}
 
 #define RESIDUAL(res_norm_sq_, res_vec_, b_, x_)\
     laplace.applyStencil(&res_vec_,&x_);\
@@ -41,7 +51,7 @@ int main(const int argc, char* const argv[])
     int ny = atoi(argv[1]);
     int nx = atoi(argv[2]);
     int numThreads = 1;
-
+    pin_threads();
 #pragma omp parallel
     {
 #pragma omp single
