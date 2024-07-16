@@ -103,7 +103,9 @@ void PDE::refreshBoundary(Grid *u)
 // i.e., lhs = A*x
 void PDE::applyStencil(Grid *lhs, Grid *x)
 {
+
     START_TIMER(APPLY_STENCIL);
+    
 
 #ifdef DEBUG
     assert((lhs->numGrids_y(true) == grids_y) && (lhs->numGrids_x(true) == grids_x));
@@ -117,10 +119,13 @@ void PDE::applyStencil(Grid *lhs, Grid *x)
     const double w_c = 2.0 * w_x + 2.0 * w_y;
 
 #ifdef LIKWID_PERFMON
-    LIKWID_MARKER_START("APPLY_STENCIL");
+    #pragma omp parallel 
+    {
+        LIKWID_MARKER_START("APPLY_STENCIL");
+    }
 #endif
 
-    #pragma omp parallel for simd collapse(2) simdlen(8)
+    #pragma omp parallel for
     for (int j = 1; j < ySize - 1; ++j)
     {
         for (int i = 1; i < xSize - 1; ++i)
@@ -130,7 +135,11 @@ void PDE::applyStencil(Grid *lhs, Grid *x)
     }
 
 #ifdef LIKWID_PERFMON
-    LIKWID_MARKER_STOP("APPLY_STENCIL");
+    #pragma omp parallel 
+    {
+       LIKWID_MARKER_STOP("APPLY_STENCIL");
+    }
+    
 #endif
 
     STOP_TIMER(APPLY_STENCIL);
@@ -142,7 +151,9 @@ void PDE::applyStencil(Grid *lhs, Grid *x)
 // GS preconditioning; solving for x: A*x=rhs
 void PDE::GSPreCon(Grid* rhs, Grid* x)
 {
+    
     START_TIMER(GS_PRE_CON);
+    
 
 #ifdef DEBUG
     assert((rhs->numGrids_y(true) == grids_y) && (rhs->numGrids_x(true) == grids_x));
@@ -157,7 +168,10 @@ void PDE::GSPreCon(Grid* rhs, Grid* x)
     const double w_c = 1.0 / static_cast<double>((2.0 * w_x + 2.0 * w_y));
 
 #ifdef LIKWID_PERFMON
+    #pragma omp parallel 
+    {
     LIKWID_MARKER_START("GS_PRE_CON");
+    }
 #endif
 
     #pragma omp parallel
@@ -209,7 +223,11 @@ void PDE::GSPreCon(Grid* rhs, Grid* x)
     }
 
 #ifdef LIKWID_PERFMON
-    LIKWID_MARKER_STOP("GS_PRE_CON");
+    #pragma omp parallel 
+    {
+        LIKWID_MARKER_STOP("GS_PRE_CON");
+    }
+    
 #endif
 
     STOP_TIMER(GS_PRE_CON);

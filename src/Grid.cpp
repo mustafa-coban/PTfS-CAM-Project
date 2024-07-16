@@ -10,13 +10,14 @@
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Grid::Grid(int columns_,int rows_):columns(columns_+2*HALO),rows(rows_+2*HALO)
 {
-
+    #pragma omp parallel for
     for(int i=0; i<4; ++i){
         ghost[i] = Dirichlet;
     }
 
     //always pad with halo; to support Dirichlet
     arrayPtr = new double[ rows*columns];
+    #pragma omp parallel for
     for (int i =0; i<rows*columns;i++)
     {
         arrayPtr[i] = 0.0;
@@ -25,11 +26,13 @@ Grid::Grid(int columns_,int rows_):columns(columns_+2*HALO),rows(rows_+2*HALO)
 
 Grid::Grid(int columns_,int rows_, BC_TYPE *ghost_):columns(columns_+2*HALO),rows(rows_+2*HALO)
 {
+    #pragma omp parallel for simd simdlen(8)
     for(int i=0; i<4; ++i){
         ghost[i] = ghost_[i];
     }
 
     arrayPtr = new double[rows*columns];
+    #pragma omp parallel for simd simdlen(8)
     for (int i =0; i<rows*columns;i++)
     {
         arrayPtr[i] = 0.0;
@@ -43,7 +46,7 @@ Grid::Grid(const Grid &s)
         rows= s.rows;
         columns = s.columns;
 
-
+        #pragma omp parallel for simd simdlen(8)
         for(int i=0; i<4; ++i){
             ghost[i] = s.ghost[i];
         }
@@ -51,6 +54,7 @@ Grid::Grid(const Grid &s)
         int totGrids = rows * columns;
         // performing a deep-copy
         arrayPtr = new double[totGrids];
+        #pragma omp parallel for simd simdlen(8)
         for(int i=0; i<totGrids;++i)
         {
             arrayPtr[i] = s.arrayPtr[i];
@@ -168,6 +172,7 @@ void Grid::fill(double val, bool halo)
 {
     int shift = halo?0:HALO;
 
+    #pragma omp parallel for
     for(int j=shift; j<numGrids_y(true)-shift; ++j) {
         for(int i=shift; i<numGrids_x(true)-shift; ++i) {
             (*this)(j,i) = val;
@@ -179,6 +184,7 @@ void Grid::rand(bool halo, unsigned int seed)
 {
     int shift = halo?0:HALO;
 
+    #pragma omp parallel for
     for(int j=shift; j<numGrids_y(true)-shift; ++j) {
         for(int i=shift; i<numGrids_x(true)-shift; ++i) {
             (*this)(j,i) = rand_r(&seed)/static_cast<double>(RAND_MAX);
@@ -191,6 +197,7 @@ void Grid::fill(std::function<double(int,int)> func, bool halo)
 {
     int shift = halo?0:HALO;
 
+    #pragma omp parallel for
     for(int j=shift; j<numGrids_y(true)-shift; ++j) {
         for(int i=shift; i<numGrids_x(true)-shift; ++i) {
             (*this)(j,i) = func(i,j);
@@ -256,7 +263,7 @@ void axpby(Grid *lhs, double a, Grid *x, double b, Grid *y, bool halo)
     LIKWID_MARKER_START("AXPBY");
 #endif
 
-    #pragma omp parallel for simd collapse(2) simdlen(8)
+    #pragma omp parallel for
     for (int yIndex = shift; yIndex < lhs->numGrids_y(true) - shift; ++yIndex)
     {
         for (int xIndex = shift; xIndex < lhs->numGrids_x(true) - shift; ++xIndex)
@@ -287,7 +294,7 @@ void copy(Grid *lhs, double a, Grid *rhs, bool halo)
     LIKWID_MARKER_START("COPY");
 #endif
 
-    #pragma omp parallel for simd collapse(2) simdlen(8)
+    #pragma omp parallel for
     for (int yIndex = shift; yIndex < lhs->numGrids_y(true) - shift; ++yIndex)
     {
         for (int xIndex = shift; xIndex < lhs->numGrids_x(true) - shift; ++xIndex)
@@ -320,7 +327,7 @@ double dotProduct(Grid *x, Grid *y, bool halo)
 
     double dot_res = 0.0;
 
-    #pragma omp parallel for simd reduction(+:dot_res) collapse(2) simdlen(8)
+    #pragma omp parallel for reduction(+:dot_res) 
     for(int yIndex = shift; yIndex < x->numGrids_y(true) - shift; ++yIndex)
     {
         for(int xIndex = shift; xIndex < x->numGrids_x(true) - shift; ++xIndex)
@@ -346,7 +353,7 @@ bool isSymmetric(Grid *u, double tol, bool halo)
 
     int shift = halo ? 0 : HALO;
 
-    #pragma omp parallel for simd collapse(2) reduction(&&:flag) simdlen(8)
+    #pragma omp parallel for reduction(&&:flag)
     for (int j = shift; j < ySize - shift; ++j)
     {
         for (int i = shift; i < xSize - shift; ++i)
